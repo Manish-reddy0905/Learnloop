@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Create Course — LearnLoop</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet"/>
+</head>
+<body>
+
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="index.html" class="logo"><span class="logo-icon">⟳</span>LearnLoop</a>
+      <div class="nav-links" id="navLinks">
+        <a href="courses.html" class="nav-link">Courses</a>
+        <a href="dashboard.html" class="nav-link">Dashboard</a>
+        <div id="authButtons">
+          <a href="login.html" class="btn-ghost">Login</a>
+          <a href="register.html" class="btn-primary">Get Started</a>
+        </div>
+        <div id="userMenu" style="display:none">
+          <span id="userGreeting" class="nav-link"></span>
+          <button onclick="logout()" class="btn-ghost">Logout</button>
+        </div>
+      </div>
+      <button class="nav-toggle" onclick="toggleNav()">☰</button>
+    </div>
+  </nav>
+
+  <main>
+    <div class="container create-course">
+      <h1 class="create-title">Create a New Course</h1>
+      <p class="create-subtitle">Fill in the details below. All fields are validated before submission.</p>
+
+      <div id="alertBox" class="alert alert-error"></div>
+
+      <div class="form-card">
+        <!-- Course Creation Form — sends POST /api/courses -->
+        <div class="form-group">
+          <label class="form-label" for="title">Course Title *</label>
+          <input class="form-input" type="text" id="title" placeholder="e.g., Complete React & Node.js Bootcamp"/>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="description">Description * (min 20 characters)</label>
+          <textarea class="form-textarea" id="description" rows="4" placeholder="Describe what students will learn..."></textarea>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="category">Category *</label>
+            <select class="form-select" id="category">
+              <option value="">Select category...</option>
+              <option value="Web Development">Web Development</option>
+              <option value="Data Science">Data Science</option>
+              <option value="Mobile Development">Mobile Development</option>
+              <option value="DevOps">DevOps</option>
+              <option value="Design">Design</option>
+              <option value="Business">Business</option>
+              <option value="Marketing">Marketing</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="level">Difficulty Level</label>
+            <select class="form-select" id="level">
+              <option value="Beginner">Beginner</option>
+              <option value="Intermediate">Intermediate</option>
+              <option value="Advanced">Advanced</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="price">Price (₹) *</label>
+            <input class="form-input" type="number" id="price" min="0" placeholder="0 for free"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="tags">Tags (comma separated)</label>
+            <input class="form-input" type="text" id="tags" placeholder="e.g., react, javascript, api"/>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Dynamic Lessons -->
+        <h3 style="margin-bottom:16px;font-size:1rem;">Lessons</h3>
+        <div id="lessonsList"></div>
+        <button type="button" class="btn-outline" onclick="addLesson()" style="margin-bottom:24px;">+ Add Lesson</button>
+
+        <div class="divider"></div>
+
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+          <button class="btn-primary btn-large" id="submitBtn" onclick="handleCreate(false)">Save as Draft</button>
+          <button class="btn-outline btn-large" onclick="handleCreate(true)">Publish Course</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+  <script>
+    let lessonCount = 0;
+
+    document.addEventListener("DOMContentLoaded", () => {
+      initAuth();
+      if (!requireAuth()) return;
+
+      const user = getUser();
+      if (user.role === "student") {
+        showAlert("alertBox", "Only instructors and admins can create courses.", "error");
+        document.getElementById("submitBtn").disabled = true;
+      }
+
+      // Add one lesson by default
+      addLesson();
+    });
+
+    function addLesson() {
+      lessonCount++;
+      const div = document.createElement("div");
+      div.id = `lesson-${lessonCount}`;
+      div.style.cssText = "background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;margin-bottom:12px;";
+      div.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <span style="font-size:0.8rem;font-weight:600;color:var(--text-muted);">Lesson ${lessonCount}</span>
+          <button type="button" onclick="removeLesson(${lessonCount})" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1.1rem;">✕</button>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="margin-bottom:0">
+            <input class="form-input" type="text" id="lesson-title-${lessonCount}" placeholder="Lesson title"/>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <input class="form-input" type="number" id="lesson-duration-${lessonCount}" min="0" placeholder="Duration (mins)"/>
+          </div>
+        </div>
+      `;
+      document.getElementById("lessonsList").appendChild(div);
+    }
+
+    function removeLesson(n) {
+      document.getElementById(`lesson-${n}`)?.remove();
+    }
+
+    function collectLessons() {
+      const lessons = [];
+      document.querySelectorAll("[id^='lesson-']").forEach((div, i) => {
+        const id = div.id.split("-")[1];
+        const title = document.getElementById(`lesson-title-${id}`)?.value.trim();
+        const duration = parseInt(document.getElementById(`lesson-duration-${id}`)?.value) || 0;
+        if (title) {
+          lessons.push({ title, duration, order: i + 1, content: "" });
+        }
+      });
+      return lessons;
+    }
+
+    async function handleCreate(publish) {
+      clearFieldErrors();
+      hideAlert("alertBox");
+
+      const title = document.getElementById("title").value.trim();
+      const description = document.getElementById("description").value.trim();
+      const category = document.getElementById("category").value;
+      const level = document.getElementById("level").value;
+      const price = parseFloat(document.getElementById("price").value);
+      const tags = document.getElementById("tags").value.split(",").map((t) => t.trim()).filter(Boolean);
+      const lessons = collectLessons();
+
+      // Client-side validation (mirrors backend rules)
+      let hasError = false;
+
+      if (title.length < 5) {
+        setFieldError(document.getElementById("title"), "Title must be at least 5 characters");
+        hasError = true;
+      }
+      if (description.length < 20) {
+        setFieldError(document.getElementById("description"), "Description must be at least 20 characters");
+        hasError = true;
+      }
+      if (!category) {
+        setFieldError(document.getElementById("category"), "Please select a category");
+        hasError = true;
+      }
+      if (isNaN(price) || price < 0) {
+        setFieldError(document.getElementById("price"), "Enter a valid price (0 or more)");
+        hasError = true;
+      }
+      if (hasError) return;
+
+      const btn = document.getElementById("submitBtn");
+      btn.textContent = "Saving...";
+      btn.disabled = true;
+
+      try {
+        // POST /api/courses
+        const data = await apiCall("/courses", "POST", {
+          title, description, category, level, price, tags, lessons,
+          isPublished: publish,
+        }, true);
+
+        showAlert("alertBox", `Course ${publish ? "published" : "saved as draft"} successfully!`, "success");
+        setTimeout(() => {
+          window.location.href = `course.html?id=${data.course._id}`;
+        }, 1200);
+      } catch (err) {
+        showAlert("alertBox", err.message, "error");
+        btn.textContent = "Save as Draft";
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>

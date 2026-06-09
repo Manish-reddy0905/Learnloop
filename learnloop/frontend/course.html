@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Course — LearnLoop</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet"/>
+</head>
+<body>
+
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="index.html" class="logo"><span class="logo-icon">⟳</span>LearnLoop</a>
+      <div class="nav-links" id="navLinks">
+        <a href="courses.html" class="nav-link">Courses</a>
+        <a href="dashboard.html" class="nav-link">Dashboard</a>
+        <div id="authButtons">
+          <a href="login.html" class="btn-ghost">Login</a>
+          <a href="register.html" class="btn-primary">Get Started</a>
+        </div>
+        <div id="userMenu" style="display:none">
+          <span id="userGreeting" class="nav-link"></span>
+          <button onclick="logout()" class="btn-ghost">Logout</button>
+        </div>
+      </div>
+      <button class="nav-toggle" onclick="toggleNav()">☰</button>
+    </div>
+  </nav>
+
+  <main class="course-detail">
+    <div class="container">
+      <div id="alertBox" class="alert alert-error"></div>
+      <div id="courseContent"><p class="loading">Loading course...</p></div>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+  <script>
+    let courseData = null;
+
+    document.addEventListener("DOMContentLoaded", () => {
+      initAuth();
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get("id");
+      if (!id) {
+        document.getElementById("courseContent").innerHTML = '<p class="error-text">No course ID provided.</p>';
+        return;
+      }
+      loadCourse(id);
+    });
+
+    async function loadCourse(id) {
+      try {
+        const data = await apiCall(`/courses/${id}`);
+        courseData = data.course;
+        renderCourse(data.course);
+      } catch (err) {
+        document.getElementById("courseContent").innerHTML = `<p class="error-text">${err.message}</p>`;
+      }
+    }
+
+    function renderCourse(course) {
+      const icon = categoryIcons[course.category] || "📚";
+      const price = course.price === 0 ? "Free" : `₹${course.price}`;
+      const totalDuration = course.lessons?.reduce((s, l) => s + (l.duration || 0), 0) || 0;
+      const user = getUser();
+
+      document.title = `${course.title} — LearnLoop`;
+
+      document.getElementById("courseContent").innerHTML = `
+        <a href="courses.html" style="color:var(--text-muted);text-decoration:none;font-size:0.85rem;">← Back to Courses</a>
+        <div class="course-detail-header" style="margin-top:24px;">
+          <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+            <span class="badge badge-category">${course.category}</span>
+            <span class="badge badge-level">${course.level}</span>
+            ${course.tags?.map(t => `<span class="tag">#${t}</span>`).join("") || ""}
+          </div>
+          <h1 class="course-detail-title">${course.title}</h1>
+          <p style="color:var(--text-muted);margin:12px 0;max-width:700px;">${course.description}</p>
+          <div class="course-info-row">
+            <div class="info-chip">👤 ${course.instructor?.name || "Unknown"}</div>
+            <div class="info-chip">★ ${course.rating?.toFixed(1)} (${course.totalRatings} ratings)</div>
+            <div class="info-chip">📚 ${course.lessons?.length || 0} lessons</div>
+            <div class="info-chip">⏱️ ${totalDuration} minutes</div>
+            <div class="info-chip">👥 ${course.enrolledStudents?.length || 0} students</div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 320px;gap:40px;align-items:start;flex-wrap:wrap;">
+          <div>
+            <h2 style="margin-bottom:20px;font-size:1.3rem;">Course Curriculum</h2>
+            <div class="lessons-list">
+              ${course.lessons?.length
+                ? course.lessons.map((l, i) => `
+                  <div class="lesson-row">
+                    <span class="lesson-num">${i + 1}</span>
+                    <span class="lesson-name">${l.title}</span>
+                    <span class="lesson-dur">${l.duration} min</span>
+                  </div>`).join("")
+                : '<div class="lesson-row"><span style="color:var(--text-muted)">No lessons yet.</span></div>'
+              }
+            </div>
+          </div>
+
+          <!-- Enroll Card -->
+          <div style="position:sticky;top:80px;">
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;">
+              <div style="font-family:'Syne',sans-serif;font-size:2rem;font-weight:800;color:var(--accent);margin-bottom:20px;">${price}</div>
+              <button class="btn-primary btn-full btn-large" id="enrollBtn" onclick="handleEnroll('${course._id}')">
+                ${user ? "Enroll Now" : "Login to Enroll"}
+              </button>
+              <div id="enrollAlert" class="alert alert-error" style="margin-top:12px;"></div>
+              <div class="divider"></div>
+              <div style="font-size:0.8rem;color:var(--text-muted);">
+                <p>✓ ${course.lessons?.length || 0} structured lessons</p>
+                <p style="margin-top:6px;">✓ Track your progress</p>
+                <p style="margin-top:6px;">✓ ${course.level} level</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function handleEnroll(courseId) {
+      const user = getUser();
+      if (!user) {
+        window.location.href = `login.html?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+        return;
+      }
+
+      const btn = document.getElementById("enrollBtn");
+      btn.textContent = "Enrolling...";
+      btn.disabled = true;
+
+      try {
+        await apiCall(`/courses/${courseId}/enroll`, "POST", null, true);
+        const alertEl = document.getElementById("enrollAlert");
+        alertEl.className = "alert alert-success show";
+        alertEl.textContent = "Enrolled successfully! Go to your dashboard to start learning.";
+        btn.textContent = "Enrolled ✓";
+        btn.style.background = "var(--green)";
+      } catch (err) {
+        const alertEl = document.getElementById("enrollAlert");
+        alertEl.className = "alert alert-error show";
+        alertEl.textContent = err.message;
+        btn.textContent = "Enroll Now";
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
